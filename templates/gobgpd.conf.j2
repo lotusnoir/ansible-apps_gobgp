@@ -1,0 +1,26 @@
+[global.config]
+    as = "65535"
+    router-id = "{{ ansible_default_ipv4.address }}"
+    port = 1790
+    local-address-list = ["{{ ansible_default_ipv4.address }}"]
+
+[[neighbors]]
+    [neighbors.config]
+        peer-as = 206958
+        neighbor-address = "10.25.0.7"
+        [neighbors.transport.config]
+            passive-mode = false
+            local-address = "{{ ansible_default_ipv4.address }}"
+            remote-port = 179
+        [neighbors.ebgp-multihop.config]
+            enabled = true
+            multihop-ttl = 64
+        [[neighbors.afi-safis]]
+            [neighbors.afi-safis.config]
+                afi-safi-name = "ipv4-unicast"
+        [[neighbors.afi-safis]]
+            [neighbors.afi-safis.config]
+                afi-safi-name = "ls"
+        [neighbors.apply-policy.config]
+            default-import-policy = "accept-route"
+            default-export-policy = "reject-route"

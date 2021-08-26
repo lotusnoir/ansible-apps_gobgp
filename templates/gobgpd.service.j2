@@ -1,0 +1,19 @@
+{{ ansible_managed | comment }}
+
+[Unit]
+Description=gobgp
+After=network-online.target
+StartLimitInterval=0
+
+[Service]
+Type=simple
+Restart=always
+ExecStart=/usr/local/bin/gobgpd -f /etc/gobgpd.conf -p -l2
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID
+SyslogIdentifier=gobgpd
+RestartSec=1
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  author: "Philippe leal"
+  description: "Install and configure gobgp"
+  role_name: apps_gobgp
+  license: "license: Apache License, Version 2.0"
+  min_ansible_version: 2.8
+
+  platforms:
+    - name: "Ubuntu"
+      versions:
+        - "xenial"
+        - "bionic"
+    - name: "Debian"
+      versions:
+        - "buster"
+        - "stretch"
+
+  galaxy_tags:
+    - network
+    - gobgp
+    - neighbourd
+
+dependencies: []

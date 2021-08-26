@@ -1,0 +1,5 @@
+---
+- name: "restart gobgpd"
+  service:
+    name: "gobgpd"
+    state: "restarted"

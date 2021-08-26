@@ -1,0 +1,192 @@
+---
+- name: "Check for gobgp binary"
+  stat:
+    path: '{{ gobgp_install_dir }}/gobgp'
+  changed_when: false
+  register: gobgp_install
+
+- when: (not gobgp_install.stat.exists or gobgp_force_install|bool) and gobgp_install_from_source|bool
+  block:
+    - name: "Ensure install dir exists"
+      file:
+        path: '{{ item }}'
+        state: directory
+        mode: '0755'
+      with_items:
+        - '{{ gobgp_install_dir }}'
+        - '{{ gobgp_temp_dir }}/gobgp'
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: "Download gobgp sources"
+      get_url:
+        url: '{{ gobgp_src_tgz_url }}'
+        dest: '{{ gobgp_temp_dir }}/{{ gobgp_src_tgz }}'
+        timeout: '60'
+        mode: '0644'
+        use_proxy: false
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: "Unarchive gobgp source"
+      unarchive:
+        src: '{{ gobgp_temp_dir }}/{{ gobgp_src_tgz }}'
+        dest: '{{ gobgp_temp_dir }}/gobgp'
+        #mode: '0644'
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: ADDFIX, add ls command on tool
+      blockinfile:
+        path: "{{ gobgp_temp_dir }}/gobgp/gobgp-{{ gobgp_version }}/cmd/gobgp/monitor.go"
+        marker: "// {mark} ANSIBLE MANAGED BLOCK"
+        insertafter: "ribCmd.PersistentFlags"
+        block: |
+          lsCmd := &cobra.Command{
+              Use: "ls",
+              Run: func(cmd *cobra.Command, args []string) {
+                recvr, err := client.MonitorTable(ctx, &api.MonitorTableRequest{
+                    TableType: api.TableType_GLOBAL,
+                    Family:    ls,
+                    Current:   current,
+                })
+                if err != nil {
+                  exitWithError(err)
+                }
+                for {
+                  r, err := recvr.Recv()
+                  if err == io.EOF {
+                      break
+                  } else if err != nil {
+                      exitWithError(err)
+                  }
+                  marshaller := jsonpb.Marshaler{}
+                  out, err := marshaller.MarshalToString(r.Path)
+                  if err != nil {
+                      exitWithError(err)
+                  }
+                  fmt.Println(out)
+                }
+              },
+          }
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: ADDFIX 2/3 - Add command
+      lineinfile:
+        path: "{{ gobgp_temp_dir }}/gobgp/gobgp-{{ gobgp_version }}/cmd/gobgp/monitor.go"
+        regexp: 'globalCmd.AddCommand(lsCmd)'
+        insertafter: 'globalCmd.AddCommand\(ribCmd\)'
+        line: '        globalCmd.AddCommand(lsCmd)'
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: ADDFIX 3/3 - add sources
+      lineinfile:
+        path: "{{ gobgp_temp_dir }}/gobgp/gobgp-{{ gobgp_version }}/cmd/gobgp/monitor.go"
+        regexp: 'github.com/golang/protobuf/jsonpb'
+        insertafter: 'github.com/spf13/cobra'
+        line: '        "github.com/golang/protobuf/jsonpb"'
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: "Download compilation sources"
+      command: "go mod download"
+      args:
+        chdir: "{{ gobgp_temp_dir }}/gobgp/gobgp-{{ gobgp_version }}"
+      become: false
+      delegate_to: localhost
+      run_once: true
+
+    - name: "Build source"
+      command: "go build"
+      args:
+        chdir: "{{ gobgp_temp_dir }}/gobgp/gobgp-{{ gobgp_version }}/cmd/{{ item }}/"
+      with_items:
+        - gobgp
+        - gobgpd
+      become: false
+      delegate_to: localhost
+      run_once: true
+
+    - name: "Copy gobgp and gobgpd binaries..."
+      copy:
+        src: '{{ gobgp_temp_dir }}/gobgp/gobgp-{{ gobgp_version }}/cmd/{{ item }}/{{ item }}'
+        dest: '{{ gobgp_install_dir }}/'
+        mode: '0755'
+      with_items:
+        - gobgp
+        - gobgpd
+
+    - name: "Remove temporary directory"
+      file:
+        path: '{{ gobgp_temp_dir }}/gobgp'
+        state: absent
+
+
+- when: (not gobgp_install.stat.exists or gobgp_force_install|bool) and gobgp_install_from_source|bool == false
+  block:
+    - name: "Download gobgp..."
+      get_url:
+        url: '{{ gobgp_tgz_url }}'
+        dest: '{{ gobgp_temp_dir }}/{{ gobgp_tgz }}'
+        timeout: '60'
+        mode: '0644'
+
+    - name: "Ensure install dir exists"
+      file:
+        path: '{{ item }}'
+        state: directory
+        mode: '0755'
+      with_items:
+        - '{{ gobgp_install_dir }}'
+        - '{{ gobgp_temp_dir }}/gobgp'
+
+    - name: "Unarchive gobgp..."
+      unarchive:
+        src: '{{ gobgp_temp_dir }}/{{ gobgp_tgz }}'
+        dest: '{{ gobgp_temp_dir }}/gobgp'
+        remote_src: true
+        mode: '0644'
+
+    - name: "Copy gobgp and gobgpd binaries..."
+      copy:
+        src: '{{ gobgp_temp_dir }}/gobgp/{{ item }}'
+        dest: '{{ gobgp_install_dir }}/'
+        remote_src: true
+        mode: '0755'
+      with_items:
+        - gobgp
+        - gobgpd
+
+    - name: "Remove temporary directory"
+      file:
+        path: '{{ gobgp_temp_dir }}/gobgp'
+        state: absent
+
+- name: "Create config file for gobgpd"
+  template:
+    src: 'gobgpd.conf.j2'
+    dest: '/etc/gobgpd.conf'
+    mode: '0640'
+  notify: "restart gobgpd"
+
+- name: "Create systemd for gobgp"
+  template:
+    src: 'gobgpd.service.j2'
+    dest: '/etc/systemd/system/gobgpd.service'
+    mode: '0640'
+  notify: "restart gobgpd"
+
+- name: Start gobgpd.service
+  systemd:
+    name: gobgpd
+    state: started
+    enabled: true
+    daemon_reload: true

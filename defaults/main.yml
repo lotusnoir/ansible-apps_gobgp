@@ -1,0 +1,13 @@
+---
+# Binary install
+gobgp_version: "2.24.0"
+gobgp_tgz: "gobgp_{{ gobgp_version }}_linux_amd64.tar.gz"
+gobgp_tgz_url: "https://github.com/osrg/gobgp/releases/download/v{{ gobgp_version }}/{{ gobgp_tgz }}"
+gobgp_install_from_source: true
+gobgp_src_tgz: "v{{ gobgp_version }}.tar.gz"
+gobgp_src_tgz_url: "https://github.com/osrg/gobgp/archive/refs/tags/{{ gobgp_src_tgz }}"
+gobgp_temp_dir: "/tmp"
+gobgp_install_dir: "/usr/local/bin"
+gobgp_force_install: false
+
+###config
